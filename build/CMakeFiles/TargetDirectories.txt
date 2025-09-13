@@ -1,9 +1,0 @@
-/home/user/projects/camera/build/CMakeFiles/camera.dir
-/home/user/projects/camera/build/CMakeFiles/edit_cache.dir
-/home/user/projects/camera/build/CMakeFiles/rebuild_cache.dir
-/home/user/projects/camera/build/CMakeFiles/list_install_components.dir
-/home/user/projects/camera/build/CMakeFiles/install.dir
-/home/user/projects/camera/build/CMakeFiles/install/local.dir
-/home/user/projects/camera/build/CMakeFiles/install/strip.dir
-/home/user/projects/camera/build/CMakeFiles/camera_autogen_timestamp_deps.dir
-/home/user/projects/camera/build/CMakeFiles/camera_autogen.dir

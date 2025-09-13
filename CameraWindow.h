@@ -39,8 +39,9 @@ private slots:
 
 private:
     Ui::CameraWindow *ui;
-    QScopedPointer<QCamera> m_camera;
-    QScopedPointer<QImageCapture> m_imageCapture;
+    QCamera *m_camera = nullptr;
+    QImageCapture *m_imageCapture = nullptr;
+
 
 #if QT_VERSION >= 0x060000
     QMediaCaptureSession m_captureSession;
@@ -49,7 +50,6 @@ private:
     QString m_savePath;
     QList<QCameraDevice> m_availableCameras;
 
-    /*void choiceCameraFunc(const QString &cameraName);*/
     void setupCamera(const QCameraDevice &cameraDevice);
     void updateCameraList();
 

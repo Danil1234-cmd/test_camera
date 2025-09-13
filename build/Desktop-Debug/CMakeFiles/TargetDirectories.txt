@@ -1,9 +1,0 @@
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/camera.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/edit_cache.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/rebuild_cache.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/list_install_components.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/install.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/install/local.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/install/strip.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/camera_autogen_timestamp_deps.dir
-/home/user/projects/camera/build/Desktop-Debug/CMakeFiles/camera_autogen.dir

@@ -1,214 +1,191 @@
 #include "CameraWindow.h"
 #include "ui_CameraWindow.h"
+
 #include <QMessageBox>
+#include <QStandardPaths>
 #include <QDir>
 #include <QDateTime>
-#include <QStandardPaths>
-#include <QComboBox>
+#include <QCoreApplication>
+#include <QDebug>
 
-CameraWindow::CameraWindow(QWidget *parent) :
-    QDialog(parent),
-    ui(new Ui::CameraWindow),
-    m_camera(nullptr),
-    m_imageCapture(nullptr)
+CameraWindow::CameraWindow(QWidget *parent)
+    : QDialog(parent)
+    , ui(new Ui::CameraWindow)
 {
     ui->setupUi(this);
 
-    // Настраиваем камеру
+    // Подключаем кнопки
+    connect(ui->captureButton, &QPushButton::clicked, this, &CameraWindow::takePhoto);
+    //connect(ui->exitButton, &QPushButton::clicked, this, &CameraWindow::close);
+
+    // Обновляем список камер
+    updateCameraList();
+
+    // Если есть хоть одна камера — сразу выбрать первую
+    if (ui->comboBoxCamera->count() > 0) {
+        ui->comboBoxCamera->setCurrentIndex(0);
+        onCameraChanged(0);
+    }
+}
+
+CameraWindow::~CameraWindow()
+{
+    // Отключаем сессию
+#if QT_VERSION >= 0x060000
+    m_captureSession.setCamera(nullptr);
+    m_captureSession.setImageCapture(nullptr);
+    m_captureSession.setVideoOutput(nullptr);
+#endif
+
+    if (m_camera) {
+        m_camera->stop();
+        m_camera->deleteLater();
+        m_camera = nullptr;
+    }
+    if (m_imageCapture) {
+        m_imageCapture->deleteLater();
+        m_imageCapture = nullptr;
+    }
+
+    delete ui;
+}
+
+void CameraWindow::updateCameraList()
+{
+    ui->comboBoxCamera->blockSignals(true);
+    ui->comboBoxCamera->clear();
+
     const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-    if (cameras.isEmpty()) {
-        QMessageBox::warning(this, "Camera", "No cameras found");
+    for (const QCameraDevice &cameraDevice : cameras) {
+        // Фильтрация: игнорируем фантомные устройства (ACPI и т.п.)
+        const QString desc = cameraDevice.description();
+        if (desc.contains("WebCam", Qt::CaseInsensitive) ||
+            desc.contains("Camera", Qt::CaseInsensitive)) {
+            ui->comboBoxCamera->addItem(desc, QVariant::fromValue(cameraDevice));
+        } else {
+            qDebug() << "Игнорируем устройство:" << desc;
+        }
+    }
+
+    ui->comboBoxCamera->blockSignals(false);
+}
+
+void CameraWindow::setupCamera(const QCameraDevice &cameraDevice)
+{
+    if (cameraDevice.isNull()) {
+        QMessageBox::warning(this, "Camera", "Выбрана некорректная камера");
         return;
     }
 
-    m_camera.reset(new QCamera(cameras.first()));
-    m_imageCapture.reset(new QImageCapture);
+    // Отключаем сессию от старых объектов
+#if QT_VERSION >= 0x060000
+    m_captureSession.setCamera(nullptr);
+    m_captureSession.setImageCapture(nullptr);
+    m_captureSession.setVideoOutput(nullptr);
+#endif
+
+    if (m_camera) {
+        disconnect(m_camera, nullptr, this, nullptr);
+        m_camera->stop();
+        m_camera->deleteLater();
+        m_camera = nullptr;
+    }
+    if (m_imageCapture) {
+        disconnect(m_imageCapture, nullptr, this, nullptr);
+        m_imageCapture->deleteLater();
+        m_imageCapture = nullptr;
+    }
+
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+
+    // Создаём новые объекты
+    m_camera = new QCamera(cameraDevice, this);
+    m_imageCapture = new QImageCapture(this);
 
 #if QT_VERSION >= 0x060000
-    // Настройка для Qt6
-    m_captureSession.setCamera(m_camera.get());
-    m_captureSession.setImageCapture(m_imageCapture.get());
+    m_captureSession.setCamera(m_camera);
+    m_captureSession.setImageCapture(m_imageCapture);
     m_captureSession.setVideoOutput(ui->viewfinderWidget);
 #else
-    // Настройка для Qt5
     m_camera->setViewfinder(ui->viewfinderWidget);
     m_camera->setCaptureMode(QCamera::CaptureStillImage);
     m_imageCapture->setCaptureDestination(QImageCapture::CaptureToFile);
 #endif
 
-    connect(ui->captureButton, &QPushButton::clicked, this, &CameraWindow::takePhoto);
-    connect(m_imageCapture.get(), &QImageCapture::imageSaved, this, &CameraWindow::imageSaved);
-    connect(m_imageCapture.get(), &QImageCapture::errorOccurred, this, &CameraWindow::errorOccurred);
+    connect(m_imageCapture, &QImageCapture::imageSaved,
+            this, &CameraWindow::imageSaved);
+    connect(m_imageCapture, &QImageCapture::errorOccurred,
+            this, &CameraWindow::errorOccurred);
 
     m_camera->start();
 
-    updateCameraList();
+    if (m_camera->error() != QCamera::NoError) {
+        QMessageBox::critical(this, "Camera Error",
+                              "Не удалось инициализировать камеру: " + m_camera->errorString());
+        m_camera->deleteLater();
+        m_camera = nullptr;
+    }
+}
 
-    // Подключаем сигналы
-    connect(ui->captureButton, &QPushButton::clicked, this, &CameraWindow::takePhoto);
-    connect(ui->comboBoxCamera, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &CameraWindow::onCameraChanged);
+void CameraWindow::onCameraChanged(int index)
+{
+    if (index < 0) return;
 
-    // Если есть доступные камеры, выбираем первую
-    if (!m_availableCameras.isEmpty()) {
-        ui->comboBoxCamera->setCurrentIndex(0);
+    QVariant data = ui->comboBoxCamera->itemData(index);
+    if (!data.isValid()) return;
+
+    QCameraDevice device = data.value<QCameraDevice>();
+    setupCamera(device);
+}
+
+void CameraWindow::takePhoto()
+{
+    if (!m_camera || !m_imageCapture) return;
+
+    QString picturesDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    QDir dir(picturesDir);
+    if (!dir.exists()) {
+        dir.mkpath(".");
     }
 
-    /*ui->comboBoxCamera->addItem("Camera 1");
-    ui->comboBoxCamera->addItem("Camera 2");
-    ui->comboBoxCamera->addItem("Camera 3");
+    QString fileName = picturesDir + "/photo_" +
+                       QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss") + ".jpg";
 
-    connect(ui->comboBoxCamera, SIGNAL(currentIndexChanged(int)), this, SLOT(onCameraSelected(int)));
-*/}
+    m_imageCapture->captureToFile(fileName);
+}
 
-CameraWindow::~CameraWindow()
+void CameraWindow::imageSaved(int id, const QString &fileName)
 {
-    delete ui;
+    Q_UNUSED(id);
+    ui->statusLabel->setText("Фото сохранено: " + fileName);
+}
+
+void CameraWindow::errorOccurred(int id, QImageCapture::Error error, const QString &errorString)
+{
+    Q_UNUSED(id);
+    Q_UNUSED(error);
+    QMessageBox::warning(this, "Ошибка", "Ошибка при сохранении изображения: " + errorString);
 }
 
 void CameraWindow::setSavePath(const QString &path)
 {
-    // Раскрываем тильду и другие специальные символы в пути
     QString expandedPath = path;
     expandedPath.replace("~", QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
 
     m_savePath = expandedPath;
-
-    // Убеждаемся, что путь заканчивается на "/"
     if (!m_savePath.endsWith("/") && !m_savePath.endsWith("\\")) {
         m_savePath += "/";
     }
 
-    // Создаем папку для сохранения фото
     QDir dir;
     if (!dir.exists(m_savePath)) {
         if (!dir.mkpath(m_savePath)) {
             QMessageBox::warning(this, "Error", "Cannot create directory: " + m_savePath);
             return;
         }
-    } else {
     }
 
-    ui->statusLabel->setText("Save path: " + m_savePath);
-}
-
-void CameraWindow::takePhoto()
-{
-    if (m_imageCapture->isReadyForCapture()) {
-        QString fileName = QString("photo_%1.jpg")
-                               .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
-        QString fullPath = m_savePath + fileName;
-
-        ui->statusLabel->setText("Capturing: " + fileName);
-        m_imageCapture->captureToFile(fullPath);
-    } else {
-        ui->statusLabel->setText("Not ready for capture");
-    }
-}
-
-void CameraWindow::imageSaved(int id, const QString &fileName)
-{
-    Q_UNUSED(id)
-    ui->statusLabel->setText("Saved: " + fileName);
-
-    // Проверяем, что файл действительно создан
-    QFileInfo fileInfo(fileName);
-    if (fileInfo.exists()) {
-        ui->statusLabel->setText("Success: " + fileName);
-    } else {
-        ui->statusLabel->setText("File not found: " + fileName);
-    }
-}
-
-void CameraWindow::errorOccurred(int id, QImageCapture::Error error, const QString &errorString)
-{
-    Q_UNUSED(id)
-    Q_UNUSED(error)
-    ui->statusLabel->setText("Error: " + errorString);
-    QMessageBox::warning(this, "Capture Error", errorString);
-}
-
-
-void CameraWindow::setupCamera(const QCameraDevice &cameraDevice)
-{
-    try {
-        // Останавливаем и освобождаем текущую камеру
-        if (m_camera) {
-            m_camera->stop();
-            m_camera.reset();
-        }
-
-        if (m_imageCapture) {
-            m_imageCapture.reset();
-        }
-
-        // Создаем новую камеру и imageCapture
-        m_camera.reset(new QCamera(cameraDevice));
-        m_imageCapture.reset(new QImageCapture);
-
-#if QT_VERSION >= 0x060000
-        // Настройка для Qt6
-        m_captureSession.setCamera(m_camera.get());
-        m_captureSession.setImageCapture(m_imageCapture.get());
-        m_captureSession.setVideoOutput(ui->viewfinderWidget);
-#else \
-    // Настройка для Qt5
-        m_camera->setViewfinder(ui->viewfinderWidget);
-        m_camera->setCaptureMode(QCamera::CaptureStillImage);
-        m_imageCapture->setCaptureDestination(QImageCapture::CaptureToFile);
-#endif
-
-        // Подключаем сигналы
-        connect(m_imageCapture.get(), &QImageCapture::imageSaved,
-                this, &CameraWindow::imageSaved);
-        connect(m_imageCapture.get(), &QImageCapture::errorOccurred,
-                this, &CameraWindow::errorOccurred);
-
-        // Запускаем камеру
-        m_camera->start();
-
-    } catch (const std::exception &e) {
-        QMessageBox::critical(this, "Camera Error",
-                              QString("Failed to initialize camera: %1").arg(e.what()));
-        ui->statusLabel->setText("Camera initialization failed");
-    }
-}
-
-
-void CameraWindow::updateCameraList()
-{
-    ui->comboBoxCamera->clear();
-    m_availableCameras = QMediaDevices::videoInputs();
-
-    if (m_availableCameras.isEmpty()) {
-        QMessageBox::warning(this, "Camera", "No cameras found");
-        ui->captureButton->setEnabled(false);
-        return;
-    }
-
-    for (const QCameraDevice &cameraDevice : m_availableCameras) {
-        ui->comboBoxCamera->addItem(cameraDevice.description());
-    }
-}
-
-
-/*void CameraWindow::onCameraSelected(int index)
-{
-    // Получаем выбранную строку из QComboBox
-    QString selectedCamera = ui->comboBoxCamera->currentText();
-
-    // Вызываем функцию choiceCameraFunc с выбранной строкой
-    choiceCameraFunc(selectedCamera);
-}*/
-
-void CameraWindow::onCameraChanged(int index)
-{
-    if (index >= 0 && index < m_availableCameras.size()) {
-        try {
-            setupCamera(m_availableCameras.at(index));
-        } catch (const std::exception &e) {
-            QMessageBox::critical(this, "Camera Error",
-                                  QString("Failed to switch camera: %1").arg(e.what()));
-        }
+    if (ui && ui->statusLabel) {
+        ui->statusLabel->setText("Путь для сохранения: " + m_savePath);
     }
 }
