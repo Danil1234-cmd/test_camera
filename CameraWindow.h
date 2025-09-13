@@ -34,6 +34,9 @@ private slots:
     void imageSaved(int id, const QString &fileName);
     void errorOccurred(int id, QImageCapture::Error error, const QString &errorString);
 
+    /*void onCameraSelected(int index);*/
+    void onCameraChanged(int index);
+
 private:
     Ui::CameraWindow *ui;
     QScopedPointer<QCamera> m_camera;
@@ -44,6 +47,12 @@ private:
 #endif
 
     QString m_savePath;
+    QList<QCameraDevice> m_availableCameras;
+
+    /*void choiceCameraFunc(const QString &cameraName);*/
+    void setupCamera(const QCameraDevice &cameraDevice);
+    void updateCameraList();
+
 };
 
 #endif // CAMERAWINDOW_H

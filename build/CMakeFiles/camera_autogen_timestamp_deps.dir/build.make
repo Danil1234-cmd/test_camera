@@ -67,11 +67,11 @@ include CMakeFiles/camera_autogen_timestamp_deps.dir/compiler_depend.make
 include CMakeFiles/camera_autogen_timestamp_deps.dir/progress.make
 
 CMakeFiles/camera_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Core.so.6.4.2
+CMakeFiles/camera_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Multimedia.so.6.4.2
 CMakeFiles/camera_autogen_timestamp_deps: /usr/lib/qt6/libexec/moc
 CMakeFiles/camera_autogen_timestamp_deps: /usr/lib/qt6/libexec/uic
 CMakeFiles/camera_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Widgets.so.6.4.2
 CMakeFiles/camera_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6MultimediaWidgets.so.6.4.2
-CMakeFiles/camera_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Multimedia.so.6.4.2
 
 camera_autogen_timestamp_deps: CMakeFiles/camera_autogen_timestamp_deps
 camera_autogen_timestamp_deps: CMakeFiles/camera_autogen_timestamp_deps.dir/build.make
